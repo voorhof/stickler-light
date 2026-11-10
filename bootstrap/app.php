@@ -1,0 +1,68 @@
+<?php
+
+use App\Http\Middleware\SetDynamicCacheHeaders;
+use App\Http\Middleware\TrackPageView;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Spatie\Health\Commands\RunHealthChecksCommand;
+use Spatie\MediaLibrary\Conversions\Commands\RegenerateCommand;
+use Spatie\ResponseCache\Middlewares\CacheResponse;
+use Spatie\ResponseCache\Middlewares\DoNotCacheResponse;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: [
+            __DIR__.'/../routes/redirect.php', // Before web.php, so the /{page} catch-all does not swallow the redirects
+            __DIR__.'/../routes/web.php',
+        ],
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+        then: function () {
+            // Authentication routes
+            Route::middleware(['web'])
+                ->prefix('account')
+                ->group(base_path('routes/auth.php'));
+
+            // User account routes
+            Route::middleware(['web', 'auth', 'verified'])
+                ->prefix('account')
+                ->name('account.')
+                ->group(base_path('routes/account.php'));
+
+            // Admin Filament routes
+            Route::middleware(['web', 'auth', 'verified', 'can:access admin'])
+                ->prefix('admin')
+                ->name('filament.admin.')
+                ->group(base_path('routes/filament.php'));
+        },
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        // Cookieless page view tracking: prepended so it still runs when CacheResponse serves a cached response
+        $middleware->web(prepend: [
+            TrackPageView::class,
+        ]);
+
+        // Spatie Response Cache: cache all successful GET requests that return text based content (HTML, JSON, etc.)
+        $middleware->web(append: [
+            CacheResponse::class,
+        ]);
+
+        // Middleware aliases
+        $middleware->alias([
+            'doNotCacheResponse' => DoNotCacheResponse::class,
+            'cache.dynamic' => SetDynamicCacheHeaders::class,
+        ]);
+
+        // Use the Spatie HttpLogger globally
+        // $middleware->append(\Spatie\HttpLogger\Middlewares\HttpLogger::class);
+    })
+    ->withCommands([
+        RegenerateCommand::class,
+        RunHealthChecksCommand::class,
+    ])
+    ->withExceptions(function (Exceptions $exceptions): void {
+        // $exceptions->shouldRenderJsonWhen(
+        //     fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+        // );
+    })->create();

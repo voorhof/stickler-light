@@ -1,0 +1,169 @@
+/**
+ * Import Bootstrap styles
+ */
+@import "bootstrap/bootstrap";
+
+
+/**
+ * App master div
+ */
+#app {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+}
+
+
+/**
+ * Components
+ */
+
+// Skip button
+.btn-skip {
+    position: absolute;
+    left: -9999px;
+    z-index: 99999;
+    opacity: 0;
+    margin: 0.5rem;
+
+    &:focus {
+        position: fixed;
+        left: 0;
+        opacity: 1;
+    }
+}
+
+// Navbar top
+.c-navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1020;
+    box-shadow: 0 2px 2px -2px rgba(0,0,0,.3);
+    background-color: var(--st-body-bg);
+
+    .navbar-brand {
+        width: 86px;
+    }
+
+    .nav-link.active {
+        color: var(--st-primary);
+    }
+}
+
+// Offcanvas navigation
+.c-offcanvas {
+
+    &__logo {
+        width: 68px;
+    }
+
+    &__footer {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-top: auto;
+        margin-bottom: .5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid $gray-700;
+    }
+
+    // Theme switcher
+    .color-scheme-theme-icon {
+        width: 1em;
+        height: 1em;
+        margin-bottom: .1em;
+        fill: currentcolor;
+    }
+    .active .color-scheme-theme-icon {
+        display: block;
+    }
+
+    .nav-link.active {
+        color: var(--st-primary);
+    }
+}
+
+// Header
+.c-header {}
+
+// Logo
+.c-logo {}
+
+// Footer
+.c-footer {
+    margin-top: auto;
+    border-top: 1px solid $gray-700;
+}
+
+// Cookie banner
+.c-cookie-banner {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: $black;
+}
+
+// Contact form
+.c-contact-form {
+
+    & &__textarea {
+        height: unset;
+        min-height: 150px;
+        max-height: 50svh;
+        field-sizing: content;
+        resize: vertical;
+        scrollbar-width: thin;
+    }
+}
+
+/**
+ * Rich Content
+ */
+.c-rich-content {
+
+    img {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+
+/**
+ * Icons
+ */
+.c-icon {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    fill: currentcolor;
+    fill-rule: evenodd;
+}
+
+/**
+ * Print (order printing)
+ */
+@media print {
+    .alert,
+    .c-navbar,
+    .c-offcanvas,
+    .c-header,
+    .c-footer,
+    .c-footer-pietje {
+        display: none !important;
+    }
+
+    #main section {
+        padding-top: 0;
+    }
+
+    h1 {font-size: 2rem;}
+    h2 {font-size: 1.75rem;}
+    h3 {font-size: 1.25rem;}
+}
+
+/**
+ * Import dark theme style
+ */
+@import "dark-app";

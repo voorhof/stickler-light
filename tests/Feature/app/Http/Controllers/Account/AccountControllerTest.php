@@ -1,0 +1,322 @@
+<?php
+
+/** @noinspection PhpUnhandledExceptionInspection */
+
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Spatie\Activitylog\Models\Activity;
+
+describe('account dashboard', function () {
+    test('unauthenticated users are redirected to login', function () {
+        $response = $this->get(route('account.dashboard'));
+
+        $response->assertRedirect(route('login'));
+    });
+
+    test('unverified users are redirected to email verification', function () {
+        $user = User::factory()->unverified()->create();
+
+        $response = $this->actingAs($user)->get(route('account.dashboard'));
+
+        $response->assertRedirect(route('verification.notice'));
+    });
+
+    test('verified users can view the dashboard', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('account.dashboard'));
+
+        $response->assertSuccessful()
+            ->assertViewIs('account.dashboard');
+    });
+
+    test('dashboard sets the page title', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('account.dashboard'));
+
+        $response->assertSee('Dashboard');
+    });
+
+    test('dashboard shows logout button', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('account.dashboard'));
+
+        $response->assertSee(__('Log out'));
+    });
+
+    test('logout from dashboard logs out the user', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('logout'));
+
+        $this->assertGuest();
+    });
+
+    test('offcanvas shows logout link for authenticated users', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('welcome.index'));
+
+        $response->assertSee(__('Log out'));
+    });
+
+    test('offcanvas does not show logout link for guests', function () {
+        $response = $this->get(route('welcome.index'));
+
+        $response->assertDontSee(__('Log out'));
+    });
+});
+
+describe('profile edit', function () {
+    test('unauthenticated users are redirected to login', function () {
+        $response = $this->get(route('account.profile'));
+
+        $response->assertRedirect(route('login'));
+    });
+
+    test('user can view the profile edit page', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('account.profile'));
+
+        $response->assertSuccessful()
+            ->assertViewIs('account.profile.edit')
+            ->assertSee(__('Edit profile'))
+            ->assertSee($user->name)
+            ->assertSee($user->email);
+    });
+
+    test('user can update name and email', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => 'New Name',
+            'email' => 'new@example.com',
+        ]);
+
+        $response->assertRedirect(route('account.profile'))
+            ->assertSessionHas('status', 'profile-updated');
+
+        $user->refresh();
+        expect($user->name)->toBe('New Name')
+            ->and($user->email)->toBe('new@example.com');
+    });
+
+    test('changing email resets verification status', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => $user->name,
+            'email' => 'newemail@example.com',
+        ]);
+
+        $user->refresh();
+        expect($user->email)->toBe('newemail@example.com')
+            ->and($user->email_verified_at)->toBeNull();
+    });
+
+    test('changing email sends verification notification', function () {
+        $user = User::factory()->create();
+
+        Illuminate\Support\Facades\Notification::fake();
+
+        $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => $user->name,
+            'email' => 'newemail@example.com',
+        ]);
+
+        $user->refresh();
+        Illuminate\Support\Facades\Notification::assertSentTo(
+            $user,
+            Illuminate\Auth\Notifications\VerifyEmail::class,
+        );
+    });
+
+    test('updating name without changing email keeps verification status', function () {
+        $user = User::factory()->create();
+        $originalVerifiedAt = $user->email_verified_at;
+
+        $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => 'New Name',
+            'email' => $user->email,
+        ]);
+
+        $user->refresh();
+        expect($user->name)->toBe('New Name')
+            ->and($user->email_verified_at)->toEqual($originalVerifiedAt);
+    });
+
+    test('user can update password with current password confirmation', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'current_password' => 'password',
+            'password' => 'newpassword',
+            'password_confirmation' => 'newpassword',
+        ]);
+
+        $response->assertRedirect(route('account.profile'));
+
+        $user->refresh();
+        expect(Hash::check('newpassword', $user->password))->toBeTrue();
+    });
+
+    test('user cannot update password without current password', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => $user->name,
+            'email' => $user->email,
+            'password' => 'newpassword',
+            'password_confirmation' => 'newpassword',
+        ]);
+
+        $response->assertSessionHasErrors(['current_password']);
+    });
+
+    test('user cannot use duplicate email', function () {
+        $user = User::factory()->create();
+        $otherUser = User::factory()->create();
+
+        $response = $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => $user->name,
+            'email' => $otherUser->email,
+        ]);
+
+        $response->assertSessionHasErrors(['email']);
+    });
+
+    test('profile update shows success message', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->post(route('account.profile.update'), [
+            'name' => 'Updated Name',
+            'email' => $user->email,
+        ]);
+
+        $response = $this->actingAs($user)->get(route('account.profile'));
+
+        $response->assertSee(__('Your profile has been updated successfully.'));
+    });
+
+    test('profile page shows back to dashboard link', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->get(route('account.profile'));
+
+        $response->assertSee(__('Back to dashboard'))
+            ->assertSee(route('account.dashboard'));
+    });
+});
+
+describe('profile deletion', function () {
+    test('unauthenticated users are redirected to login', function () {
+        $response = $this->delete(route('account.profile.destroy'));
+
+        $response->assertRedirect(route('login'));
+    });
+
+    test('unverified users are redirected to email verification', function () {
+        $user = User::factory()->unverified()->create();
+
+        $response = $this->actingAs($user)->delete(route('account.profile.destroy'));
+
+        $response->assertRedirect(route('verification.notice'));
+    });
+
+    test('user can delete their account with correct password', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->delete(route('account.profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+        $response->assertRedirect('/');
+
+        expect(User::find($user->id))->toBeNull();
+    });
+
+    test('user is logged out after deleting their account', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('account.profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+        $this->assertGuest();
+    });
+
+    test('deletion fails with wrong password', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->delete(route('account.profile.destroy'), [
+            'password' => 'wrongpassword',
+        ]);
+
+        $response->assertSessionHasErrorsIn('userDeletion', ['password']);
+
+        expect(User::find($user->id))->not->toBeNull();
+    });
+
+    test('deletion fails without password', function () {
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->delete(route('account.profile.destroy'));
+
+        $response->assertSessionHasErrorsIn('userDeletion', ['password']);
+
+        expect(User::find($user->id))->not->toBeNull();
+    });
+
+    test('deletion logs activity before deleting the user', function () {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->delete(route('account.profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+        $activity = Activity::where('log_name', 'authentication')
+            ->where('causer_id', $user->id)
+            ->latest('id')
+            ->first();
+
+        expect($activity)->not->toBeNull()
+            ->and($activity->event)->toBe('delete')
+            ->and($activity->subject_id)->toBe($user->id);
+    });
+
+    test('sole administrator cannot delete their account via profile destruction', function () {
+        $adminRole = App\Models\Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'web']);
+        $admin = User::factory()->create();
+        $admin->assignRole($adminRole);
+
+        $response = $this->actingAs($admin)->delete(route('account.profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+        $response->assertSessionHasErrorsIn('userDeletion', ['deletion']);
+        expect(User::find($admin->id))->not->toBeNull();
+        $this->assertAuthenticatedAs($admin);
+    });
+
+    test('administrator can delete their account if another admin exists', function () {
+        $adminRole = App\Models\Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'web']);
+        $admin1 = User::factory()->create();
+        $admin1->assignRole($adminRole);
+
+        $admin2 = User::factory()->create();
+        $admin2->assignRole($adminRole);
+
+        $response = $this->actingAs($admin1)->delete(route('account.profile.destroy'), [
+            'password' => 'password',
+        ]);
+
+        $response->assertRedirect('/');
+        expect(User::find($admin1->id))->toBeNull();
+        $this->assertGuest();
+    });
+});

@@ -1,0 +1,373 @@
+<?php
+
+/** @noinspection PhpUnhandledExceptionInspection */
+
+use App\Jobs\GenerateSitemapJob;
+use App\Models\Media;
+use App\Models\Page;
+use App\Models\User;
+use App\Observers\PageObserver;
+use Illuminate\Database\Eloquent\Model;
+
+use function Illuminate\Support\defer;
+
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Queue;
+
+use function Pest\Laravel\actingAs;
+
+use Spatie\ResponseCache\Facades\ResponseCache;
+
+it('tracks creator and updater on page create and update', function (): void {
+    $creator = User::factory()->create();
+    $updater = User::factory()->create();
+
+    actingAs($creator);
+
+    $page = Page::create([
+        'title' => 'Observer Test Page',
+        'intro' => 'Testing observer tracking.',
+    ]);
+
+    expect($page->created_by_user_id)->toBe($creator->id)
+        ->and($page->updated_by_user_id)->toBe($creator->id);
+
+    actingAs($updater);
+
+    $page->update(['title' => 'Updated Title']);
+
+    expect($page->fresh()->created_by_user_id)->toBe($creator->id)
+        ->and($page->fresh()->updated_by_user_id)->toBe($updater->id);
+});
+
+it('does not overwrite user ids when no user is authenticated', function (): void {
+    $creator = User::factory()->create();
+
+    actingAs($creator);
+
+    $page = Page::create([
+        'title' => 'Auth Create No Auth Update',
+        'intro' => 'Testing unauthenticated updates.',
+    ]);
+
+    $originalCreatorId = $page->created_by_user_id;
+    $originalUpdaterId = $page->updated_by_user_id;
+
+    auth()->logout();
+
+    $page->update(['title' => 'Updated Without Auth']);
+
+    expect($page->fresh()->created_by_user_id)->toBe($originalCreatorId)
+        ->and($page->fresh()->updated_by_user_id)->toBe($originalUpdaterId);
+});
+
+it('appends numeric suffix to excluded slug on create', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $excludedSlug = config('sluggable.excluded_from_slug')[0] ?? 'contact';
+
+    $page = Page::create([
+        'title' => 'Contact Page',
+        'slug' => $excludedSlug,
+        'intro' => 'Testing excluded slug.',
+    ]);
+
+    expect($page->slug)->toBe($excludedSlug.'-1')
+        ->and($page->fresh()->slug)->toBe($excludedSlug.'-1');
+});
+
+it('appends numeric suffix to excluded slug on update', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Normal Page',
+        'slug' => 'normal-page',
+        'intro' => 'Original intro.',
+    ]);
+
+    expect($page->slug)->toBe('normal-page');
+
+    $excludedSlug = config('sluggable.excluded_from_slug')[0] ?? 'contact';
+
+    $page->update(['slug' => $excludedSlug]);
+
+    expect($page->fresh()->slug)->toBe($excludedSlug.'-1');
+});
+
+it('does not alter non-excluded slug on create or update', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Unique Title',
+        'slug' => 'unique-allowed-slug',
+        'intro' => 'Intro text.',
+    ]);
+
+    expect($page->slug)->toBe('unique-allowed-slug');
+
+    $page->update(['slug' => 'another-unique-slug']);
+
+    expect($page->fresh()->slug)->toBe('another-unique-slug');
+});
+
+it('generates numeric suffix for excluded slug when title matches reserved word', function (): void {
+    auth()->logout();
+
+    $excludedSlug = config('sluggable.excluded_from_slug')[0] ?? 'contact';
+
+    $page = Page::create([
+        'title' => ucfirst($excludedSlug),
+        'intro' => 'Testing unauth excluded slug.',
+    ]);
+
+    expect($page->slug)->toBe($excludedSlug.'-1');
+});
+
+it('syncs image alt text to media name when a page is saved', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $uuid = '0190a2b1-c3d4-7e8f-9a0b-1c2d3e4f5a6b';
+
+    $page = Page::create([
+        'title' => 'Page with Rich Content Image',
+        'intro' => 'Intro text',
+        'content' => '<p><img src="/storage/test.jpg" alt="Observer Test Alt" data-id="'.$uuid.'"></p>',
+    ]);
+
+    $media = Media::create([
+        'uuid' => $uuid,
+        'model_type' => $page->getMorphClass(),
+        'model_id' => $page->getKey(),
+        'collection_name' => 'content',
+        'name' => 'original-name.jpg',
+        'file_name' => 'test.jpg',
+        'mime_type' => 'image/jpeg',
+        'disk' => 'public',
+        'size' => 1024,
+        'manipulations' => [],
+        'custom_properties' => [],
+        'generated_conversions' => [],
+        'responsive_images' => [],
+    ]);
+
+    expect($media->name)->toBe('original-name.jpg');
+
+    $page->update(['title' => 'Updated Page Title']);
+
+    expect($media->fresh()->name)->toBe('Observer Test Alt');
+});
+
+it('calls syncImageAltToMediaName directly via observer saved method', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $uuid = '0190a2b1-c3d4-7e8f-9a0b-1c2d3e4f5a6b';
+
+    $page = Page::create([
+        'title' => 'Page Observer Direct Test',
+        'intro' => 'Intro text',
+        'content' => '<p><img src="/storage/test.jpg" alt="Direct Observer Alt" data-id="'.$uuid.'"></p>',
+    ]);
+
+    $media = Media::create([
+        'uuid' => $uuid,
+        'model_type' => $page->getMorphClass(),
+        'model_id' => $page->getKey(),
+        'collection_name' => 'content',
+        'name' => 'old-name.jpg',
+        'file_name' => 'test.jpg',
+        'mime_type' => 'image/jpeg',
+        'disk' => 'public',
+        'size' => 1024,
+        'manipulations' => [],
+        'custom_properties' => [],
+        'generated_conversions' => [],
+        'responsive_images' => [],
+    ]);
+
+    $observer = new PageObserver;
+    $observer->saved($page);
+
+    expect($media->fresh()->name)->toBe('Direct Observer Alt');
+});
+
+it('queues sitemap generation when a page is created', function (): void {
+    $user = User::factory()->create();
+    Queue::fake([GenerateSitemapJob::class]);
+    actingAs($user);
+
+    Page::create([
+        'title' => 'Sitemap Observer Test Page',
+        'intro' => 'Testing sitemap generation.',
+    ]);
+
+    Queue::assertPushed(GenerateSitemapJob::class);
+});
+
+it('queues sitemap generation when a page is deleted', function (): void {
+    $user = User::factory()->create();
+    $page = Model::withoutEvents(fn (): Page => Page::factory()->create([
+        'created_by_user_id' => $user->id,
+        'updated_by_user_id' => $user->id,
+    ]));
+    Queue::fake([GenerateSitemapJob::class]);
+
+    $page->delete();
+
+    Queue::assertPushed(GenerateSitemapJob::class);
+});
+
+it('flushes response cache when a page is saved', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    config(['responsecache.enabled' => true]);
+
+    ResponseCache::shouldReceive('clear')->once();
+
+    Page::create([
+        'title' => 'Cache Flush Test Page',
+        'intro' => 'Testing cache flush on save.',
+    ]);
+
+    defer()->invoke();
+
+    ResponseCache::shouldReceive('clear')->once();
+
+    Page::first()->update(['title' => 'Cache Flush Updated Page']);
+
+    defer()->invoke();
+});
+
+it('flushes response cache when a page is deleted', function (): void {
+    $user = User::factory()->create();
+    $page = Model::withoutEvents(fn (): Page => Page::factory()->create([
+        'created_by_user_id' => $user->id,
+        'updated_by_user_id' => $user->id,
+    ]));
+
+    config(['responsecache.enabled' => true]);
+    ResponseCache::shouldReceive('clear')->once();
+
+    $page->delete();
+
+    defer()->invoke();
+});
+
+it('disables activity logging on second save for newly created pages', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Activity Log Test Page',
+        'intro' => 'Testing activity log suppression.',
+    ]);
+
+    $observer = new PageObserver;
+
+    // Simulate a newly created page
+    $page->wasRecentlyCreated = true;
+
+    // The observer should call disableLogging on the model
+    $observer->saved($page);
+
+    // Logging is disabled then re-enabled, so it ends up true
+    expect($page->enableLoggingModelsEvents)->toBeTrue();
+});
+
+it('does not disable activity logging for existing pages', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Existing Page',
+        'intro' => 'Testing existing page.',
+        'content' => '<p>Some content</p>',
+    ]);
+
+    $observer = new PageObserver;
+
+    // Simulate an existing page (not newly created)
+    $page->wasRecentlyCreated = false;
+    $page->enableLoggingModelsEvents = true;
+
+    $observer->saved($page);
+
+    // Logging should remain enabled
+    expect($page->enableLoggingModelsEvents)->toBeTrue();
+});
+
+it('updates the created activity with content after the second save', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    // Create a page without content (simulating the first save)
+    $page = Page::create([
+        'title' => 'Content Activity Test Page',
+        'intro' => 'Testing content in activity log.',
+    ]);
+
+    // Simulate the RichEditor setting content on the second save
+    $page->content = '<p>Rich editor content</p>';
+    $page->wasRecentlyCreated = true;
+
+    $observer = new PageObserver;
+    $observer->saved($page);
+
+    // The "created" activity should now include the content field
+    $activity = $page->activitiesAsSubject()
+        ->where('event', 'created')
+        ->latest('created_at')
+        ->first();
+
+    expect($activity)->not->toBeNull()
+        ->and($activity->properties['attributes']['content'])->toBe('<p>Rich editor content</p>');
+});
+
+it('flushes rich content cache when a page is saved', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Rich Content Cache Test Page',
+        'intro' => 'Testing rich content cache flush.',
+        'content' => '<p>Original content</p>',
+    ]);
+
+    // Render to populate the cache
+    $page->renderResponsiveRichContent();
+    $cacheKey = 'rich_content.'.Page::class.'.'.$page->getKey().'.content';
+
+    expect(Cache::get($cacheKey))->not->toBeNull();
+
+    // Update the page, which should flush the cache via the observer
+    $page->update(['content' => '<p>Updated content</p>']);
+
+    expect(Cache::get($cacheKey))->toBeNull();
+});
+
+it('flushes rich content cache when a page is deleted', function (): void {
+    $user = User::factory()->create();
+    actingAs($user);
+
+    $page = Page::create([
+        'title' => 'Rich Content Cache Delete Test Page',
+        'intro' => 'Testing rich content cache flush on delete.',
+        'content' => '<p>Content to delete</p>',
+    ]);
+
+    // Render to populate the cache
+    $page->renderResponsiveRichContent();
+    $cacheKey = 'rich_content.'.Page::class.'.'.$page->getKey().'.content';
+
+    expect(Cache::get($cacheKey))->not->toBeNull();
+
+    // Delete the page, which should flush the cache via the observer
+    $page->delete();
+
+    expect(Cache::get($cacheKey))->toBeNull();
+});

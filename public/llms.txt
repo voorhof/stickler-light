@@ -1,0 +1,3 @@
+# Stickler Light
+
+> Starter kit for Laravel
