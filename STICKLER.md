@@ -11,12 +11,11 @@ Out of the box, Stickler Light includes:
 - **A complete Laravel foundation** with environment-based configuration, database migrations, seed data, queues, scheduled tasks, and a structure that is ready to customize.
 - **A Filament 5 admin panel** with user management, navigation, notifications, soft-delete workflows, reusable form schemas and table definitions, resizable columns, and business-hours management. See the [Filament implementation guide](FILAMENT.md) for details.
 - **Content management building blocks** for posts and other content, including slugs, tags, sorting, localized content, rich text editing, and a custom rich-editor source-code tool.
-- **User authentication** with registration, login, password reset, email verification, and a protected account dashboard. Guest carts are automatically merged into the authenticated cart on login or registration. See the [User Authentication section](#user-authentication) for details.
-- **E-commerce building blocks** with products and product variants (option types, options, SKU, stock and price per variant), categories, orders with order and payment status, a public cart with a navbar badge, real-time stock validation, concurrency-safe inventory reservations (`lockForUpdate()`), and a complete hosted checkout flow powered by Mollie payments. See the [Store Management section](FILAMENT.md#store-management) of the Filament guide and the [Payment and Checkout section](#payment-and-checkout).
+- **User authentication** with registration, login, password reset, email verification, and a protected account dashboard. See the [User Authentication section](#user-authentication) for details.
 - **Media management** powered by Spatie Media Library, including uploads, image conversions, responsive media support, integration with Filament, and a scheduled orphaned media cleanup command (`media:prune-orphans`) that runs weekly to remove disk files with no database record.
 - **User access and administration** with roles and permissions, panel access checks, administrative lockout and self-deletion fail-safes (ensuring at least one active admin remains), admin configuration through `.env`, and optional two-factor authentication support.
 - **Website essentials** such as HTML head management, model-driven sitemap generation, robots.txt support, opening hours, cookie consent, and a Bootstrap-based public frontend.
-- **Security and abuse protection** with form honeypots, dynamic HTTP cache headers to prevent public CDN cache poisoning, rate limiting (including password reset and payment webhook endpoints), webhook signature verification, sanitized rich content rendering, and restricted access to administration and debugging tools.
+- **Security and abuse protection** with form honeypots, dynamic HTTP cache headers to prevent public CDN cache poisoning, rate limiting on sensitive endpoints, sanitized rich content rendering, and restricted access to administration and debugging tools.
 - **Operational visibility and resilience** with Telescope for non-production debugging, HTTP and activity logging, container-optimized cookieless server-side page view analytics, application health checks, database and file backups, and response caching for production workloads. Telescope is not booted in production. See the [Page Views section](FILAMENT.md#page-views) of the Filament guide for details.
 - **Developer experience** with Laravel Boost skills, Vite and Sass asset tooling, Pest tests, Laravel Pint code style checks, and documentation for the installed Composer and Node dependencies.
 
@@ -44,7 +43,7 @@ When starting a project from Stickler Light, replace the sample identity and con
 
 1. Set the application name, URL, locale, administrator credentials, and feature flags in `.env`.
 2. Replace the artwork and branding in `public` and update references to those assets in the Blade layouts and views.
-3. Review the seeded users, roles, permissions, opening-hours record, and sample content (products, orders and carts) before using the project outside local development.
+3. Review the seeded users, roles, permissions, opening-hours record, and sample content before using the project outside local development.
 4. Adapt the public routes, controllers, views, models, and Filament resources to the new project's content model and navigation.
 5. Keep generated or published vendor assets in sync when updating the related package; project-owned source files remain the place for custom behavior.
 6. Regenerate `llms.txt` so it describes the new project's pages and content instead of the starter kit's defaults.
@@ -59,14 +58,13 @@ When preparing a Stickler-based project for production deployment, complete the 
 - [ ] **Verify administrative accounts** — Ensure at least one active administrator exists with a confirmed email address and secure password.
 - [ ] **Update application identity** — Set `APP_NAME`, `APP_URL`, and `APP_LOCALE` in `.env` to match your project.
 - [ ] **Configure a real mail driver** — Replace the default `log` mail driver with a production-ready service (e.g., Mailgun, Postmark, SES) and update the `MAIL_` variables in `.env`.
-- [ ] **Set up payment gateway** — Replace the test `MOLLIE_KEY` with a live API key and verify `PAYMENT_WEBHOOK_URL` points to your production domain.
-- [ ] **Review and update seeded content** — Replace sample products, categories, posts, pages, and opening hours with your own content.
+- [ ] **Review and update seeded content** — Replace sample categories, posts, pages, and opening hours with your own content.
 - [ ] **Disable debug mode** — Set `APP_DEBUG=false` and `APP_ENV=production` in `.env`.
 - [ ] **Secure sessions** — Set `SESSION_SECURE_COOKIE=true` when serving over HTTPS.
 - [ ] **Configure backups** — Verify `BACKUP_` settings in `.env` and run `php artisan backup:run` to confirm backups work.
 - [ ] **Enable response caching & dynamic headers** — Set `RESPONSE_CACHE_ENABLED=true` for production performance.
-- [ ] **Configure queue worker** — Ensure a queue worker is running (e.g., via supervisor) for email delivery, sitemap generation, and webhook processing with transaction-safe commit verification.
-- [ ] **Verify scheduled tasks** — Confirm the cron scheduler is running for daily cart cleanup (`carts:cleanup`), weekly orphaned media pruning (`media:prune-orphans`), and scheduled content cache clearing.
+- [ ] **Configure queue worker** — Ensure a queue worker is running (e.g., via supervisor) for email delivery and sitemap generation.
+- [ ] **Verify scheduled tasks** — Confirm the cron scheduler is running for weekly orphaned media pruning (`media:prune-orphans`) and scheduled content cache clearing.
 - [ ] **Set up monitoring** — Configure health checks and review Telescope is disabled in production (default behavior).
 - [ ] **Update branding** — Replace the default logo and artwork in `public/` and update any hardcoded references in Blade views.
 
@@ -96,13 +94,13 @@ After installation, update the variables, such as `APP_NAME` and `APP_URL`, in t
 You can also set `RESPONSE_CACHE_ENABLED` to true (not required for development, but useful for production)
 
 ```dotenv
-APP_NAME="Stickler light"
+APP_NAME="Stickler Light"
 APP_URL=https://stickler-light.test
 
 RESPONSE_CACHE_ENABLED=true
 ```
 
-When response caching is enabled, public GET routes use dynamic HTTP cache headers (`SetDynamicCacheHeaders`) and Spatie ResponseCache. For anonymous guests, responses include `Cache-Control: public, max-age=60, s-maxage=300` and `ETag` to allow edge CDNs and proxies to cache generic pages. For visitors with a `cart_token` cookie, an authenticated session, or session flash messages, response headers dynamically switch to `Cache-Control: private, max-age=60` with `Vary: Cookie, Accept-Encoding` to prevent shared proxy/CDN cache poisoning. After upgrading an existing installation, run `php artisan responsecache:clear` once to remove pages cached before this rule existed.
+When response caching is enabled, public GET routes use dynamic HTTP cache headers (`SetDynamicCacheHeaders`) and Spatie ResponseCache. For anonymous guests, responses include `Cache-Control: public, max-age=60, s-maxage=300` and `ETag` to allow edge CDNs and proxies to cache generic pages. For authenticated visitors or those with session flash messages, response headers dynamically switch to `Cache-Control: private, max-age=60` with `Vary: Cookie, Accept-Encoding` to prevent shared proxy/CDN cache poisoning. After upgrading an existing installation, run `php artisan responsecache:clear` once to remove pages cached before this rule existed.
 
 You can log in to the Filament admin dashboard via `/admin` using the login details defined in .env:
 
@@ -134,7 +132,7 @@ Make sure you have all this covered:
 
 ## User Authentication
 
-Public user authentication allows customers to create an account, log in, manage their profile, and access a protected account dashboard. The authentication flow integrates with the cart system so guest carts are preserved when a user logs in or registers.
+Public user authentication allows users to create an account, log in, manage their profile, and access a protected account dashboard.
 
 ### Registration and login
 
@@ -163,17 +161,6 @@ Public user authentication allows customers to create an account, log in, manage
 - The dashboard requires both the `auth` and `verified` middleware, ensuring only verified users can access it.
 - The view is located at `resources/views/account/dashboard.blade.php`.
 
-### Guest cart merge on login
-
-When a guest user adds items to their cart and then logs in or registers, the `MergeGuestCart` middleware automatically merges the guest cart into the authenticated user's cart.
-
-- `MergeGuestCart` (`app/Http/Middleware`) is applied only to the `POST /login` and `POST /registreer` routes, not globally, to avoid unnecessary overhead on every request.
-- The middleware runs after the response is generated (`$next($request)`), so the user is already authenticated before the merge.
-- If the user has a `cart_token` cookie pointing to a non-empty guest cart, the guest cart items are merged into the user's authenticated cart using `CartService::merge()`.
-- The merge runs inside a database transaction, validates stock availability, clamps combined item quantities to available inventory limits, and safely removes items whose inventory has depleted.
-- After the merge, the `cart_token` cookie is updated to point to the user's authenticated cart, so subsequent requests use the correct cart.
-- If the guest cart is empty, not a guest cart, or the user has no `cart_token` cookie, the middleware returns immediately without any database queries.
-
 ### Authentication views
 
 All authentication views are located in `resources/views/auth/` and use the `<x-layouts.app>` layout with Bootstrap styling:
@@ -185,40 +172,3 @@ All authentication views are located in `resources/views/auth/` and use the `<x-
 - `verify-email.blade.php` — Email verification prompt with resend link.
 - `confirm-password.blade.php` — Password confirmation form.
 
-## Payment and Checkout
-
-Stickler includes a complete checkout and payment lifecycle integrating a database-backed cart, customer address collection, hosted payment gateway redirects, asynchronous webhook synchronization, and customer email notifications.
-
-### Checkout Flow
-
-1. **Cart Review (`GET /cart`)**: Customers review items, adjust quantities with real-time stock validation, or remove products. Product discounts and variant pricing rules are automatically applied.
-2. **Order Confirmation (`GET /checkout`)**: Customers provide contact info (name, email, phone), shipping address, and optional billing address (with a "same as shipping" toggle) and order notes. For logged-in users, details are pre-filled automatically from their user profile.
-3. **Order Placement (`POST /checkout`)**: Validates the form via `StoreOrderRequest`, creates an `Order` and associated `OrderItem` snapshots in a database transaction with pessimistic row locking (`lockForUpdate()`) to atomically reserve stock and prevent race-condition overselling. Clears the active cart and delegates payment creation to `PaymentService`. If stock is depleted concurrently, the customer is gracefully redirected back to their cart with a clear notification.
-4. **Hosted Payment Redirect**: The customer is redirected to Mollie's secure checkout page (supporting iDEAL, Bancontact, Credit Card, Apple Pay, and other configured payment methods).
-5. **Webhook Processing (`POST /payment/webhook/mollie`)**: Mollie asynchronously notifies the application of payment status updates. The application securely verifies payment status directly via the Mollie API, updates the order to `paid` and `confirmed`, and dispatches the queued `PaymentConfirmation` email. On cancellation, failure, or expiry, stock is restored exactly once via `OrderObserver` when the order status transitions to `Cancelled` — preventing premature stock release on pending payments and inventory inflation from webhook retries.
-6. **Order Confirmation & Thank-You (`GET /order-confirmed/{order}`)**: Displays order details, items breakdown, pricing, and live payment status. Protected by authorization checks: authenticated users can only view their own orders, and guest visitors can access via session (`last_guest_order_id`) or a Laravel signed URL (`URL::signedRoute()`) — ensuring mobile banking redirects (iDEAL, Bancontact QR) and cross-device email links work without `403 Forbidden` errors.
-7. **Payment Recovery**: If a payment is cancelled or fails at the gateway, the customer is directed back to their order page with an alert and an immediate "Pay now" retry button. The retry payment endpoint also accepts signed URLs for guest access.
-
-### Architecture and Configuration
-
-- **Abstraction**: `App\Contracts\PaymentProvider` and `App\Services\PaymentService` allow swapping or adding additional payment gateways (e.g., Stripe, PayPal) without modifying controller or checkout logic.
-- **Provider Implementation**: `App\Payments\MollieProvider` integrates with `mollie/laravel-mollie` (v5) and handles payment creation, webhooks, and status mapping.
-- **Configuration**: Defined in `config/payment.php` and configured through `.env`:
-  - `PAYMENT_PROVIDER=mollie`: Active gateway provider.
-  - `MOLLIE_KEY=test_...`: Mollie API key.
-  - `PAYMENT_WEBHOOK_URL`: Optional custom webhook override for testing with local tunnels (e.g. Ngrok, Expose, Herd Share).
-- **Security**: The webhook endpoint `payment/webhook/*` is excluded from CSRF verification in `bootstrap/app.php` to accept provider callbacks. Webhooks query Mollie's API directly for verified payment status to prevent tampering.
-- **Queueing**: Payment confirmation emails use `App\Mail\PaymentConfirmation` and implement `ShouldQueue` so email delivery does not block webhook response execution.
-- **Rate limiting**: All cart POST endpoints (`cart.add`, `cart.items.update`, `cart.items.remove`, `checkout.store`, `checkout.pay`) are protected by `throttle:10,1` middleware (10 requests per minute per IP). Password reset endpoints are also rate limited (`throttle:3,1` for email, `throttle:5,1` for token). The payment webhook endpoint uses `throttle:30,1` to prevent abuse while allowing legitimate callbacks.
-
-### Inclusive VAT Pricing
-
-All product prices in the CMS are **VAT-inclusive** — the price entered by the webshop manager is exactly what the customer pays. The system calculates the net subtotal and tax amount automatically at order creation.
-
-- **Global tax rate**: Configurable via `TAX_RATE` in `.env` (default `21` for Belgium).
-- **Per-product override**: Each product and variant has a `tax_rate` column (nullable). When `null`, the global rate applies. Variants inherit from their product when their own `tax_rate` is `null`.
-- **Order tax calculation**: At order creation, `CartService::convertToOrder()` calculates per-item net price and tax amount, storing `subtotal` (net), `tax_amount`, and `total` (gross) on the `Order` model. The Filament admin panel's OrderForm derives the tax amount from the gross subtotal using the same configured tax rate.
-- **Tax rate snapshot**: The tax rate at the time of adding to cart is stored on `CartItem`, ensuring historical accuracy if a product's tax rate changes later.
-- **CMS price input**: Price fields in the Filament product form are labeled "Price (incl. VAT)" with helper text. A tax rate select (0%, 6%, 12%, 21%) allows per-product overrides.
-- **Public price display**: Product pages show a VAT notice (e.g., "incl. 21% VAT"). The thank-you page displays the order breakdown with "(excl. VAT)" next to the net subtotal and "(incl. VAT)" next to the total.
-- **Email templates**: Payment confirmation emails include "(incl. VAT)" next to the order total.
