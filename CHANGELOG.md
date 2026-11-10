@@ -11,6 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Initial release
 
-- Forked of https://github.com/voorhof/stickler-light
+- Forked of https://github.com/voorhof/stickler
 - Removed all e-shop integration code  
 

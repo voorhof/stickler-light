@@ -1304,7 +1304,7 @@ LOG_VIEWER_ENABLED=true
 LOG_VIEWER_API_ONLY=false
 ```
 
-The Log Viewer can be accessed at URI [admin/log-viewer](https://stickler.test/admin/log-viewer).  
+The Log Viewer can be accessed at URI [admin/log-viewer](https://stickler-light.test/admin/log-viewer).  
 Access is restricted by default for users with the `access logs` permission.
 
 Inside the default `AuthorizeLogViewer` middleware from log-viewer is an existence check for `Gate::has('viewLogViewer')`.  
