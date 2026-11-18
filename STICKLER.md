@@ -76,17 +76,17 @@ The easiest way to install this starter kit is using the [Laravel Installer](htt
 This will set up the project automatically.
 
 ```bash
-laravel new my-app --using=voorhof/stickler-light:v1.9.1 --phpunit
+laravel new my-app --using=voorhof/stickler-light:v1.10.0 --phpunit
 ```
 
-> **Important:** Always specify a version tag (e.g., `v1.9.1`) when using the `--using` flag. Without a version, the Laravel installer will check out the development branch (`dev-main`) instead of the latest stable release.
+> **Important:** Always specify a version tag (e.g., `v1.10.0`) when using the `--using` flag. Without a version, the Laravel installer will check out the development branch (`dev-main`) instead of the latest stable release.
 
 The `--phpunit` flag is required because Stickler Light already includes Pest. Without it, the Laravel installer will attempt to install Pest again and run the `pest-plugin-drift` migration tool, which may modify the existing test files.
 
 At the end of the installation, the Laravel installer may prompt you with interactive Laravel Boost questions. Boost is already pre-configured for Stickler Light via `boost.json`, so you can simply accept the defaults by pressing Enter on each prompt. If you prefer to skip these prompts entirely, use the `--no-boost` flag:
 
 ```bash
-laravel new my-app --using=voorhof/stickler-light:v1.9.1 --phpunit --no-boost
+laravel new my-app --using=voorhof/stickler-light:v1.10.0 --phpunit --no-boost
 ```
 
 After installation, update the variables, such as `APP_NAME` and `APP_URL`, in the `.env` file so that they match your environment.
@@ -112,7 +112,7 @@ You can log in to the Filament admin dashboard via `/admin` using the login deta
 You may also install Stickler Light manually by cloning the repository and running the following commands:
 
 ```bash
-git clone --branch v1.9.1 https://github.com/voorhof/stickler-light.git my-app
+git clone --branch v1.10.0 https://github.com/voorhof/stickler-light.git my-app
 cd my-app
 composer install
 cp .env.example .env
